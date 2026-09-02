@@ -1,0 +1,29 @@
+# sqlc config (blueprint ADR-3 / Task 0.5).
+# Generate: sqlc generate
+# CI check: sqlc diff --experimental (fails when generated code is stale)
+version: "2"
+sql:
+  - engine: "postgresql"
+    # Queries are co-located per module; each module gets its own Go package
+    # so generated types never leak across module boundaries (ADR-1).
+    queries:
+      - internal/identity/queries
+      - internal/tenancy/queries
+      - internal/changerequest/queries
+      - internal/collaboration/queries
+      - internal/audit/queries
+      - internal/notification/queries
+    schema: internal/migrations
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/gen/sqlc"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_pointers_for_null_types: true
+        emit_prepared_queries: false
+        overrides:
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+          - db_type: "timestamptz"
+            go_type: "time.Time"

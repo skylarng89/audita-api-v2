@@ -1,6 +1,6 @@
 module github.com/audita/audita-api
 
-go 1.25
+go 1.27
 
 require (
 	github.com/bluemonday/bluemonday v1.0.27

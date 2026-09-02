@@ -3,7 +3,7 @@
 # Run:    docker run --rm -it --env-file .env -p 8080:8080 audita-api
 
 # ── Build stage ─────────────────────────────────────────────────────────
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 WORKDIR /src
 

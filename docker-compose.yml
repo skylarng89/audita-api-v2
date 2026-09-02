@@ -1,0 +1,119 @@
+# Audita API — backend-only compose stack (audita-v2/audita-api).
+# Boots just the API and its infrastructure dependencies, without the
+# frontend. Use the root audita-v2/docker-compose.yml for the full stack.
+#
+#   cp ../.env.example .env   # then edit values
+#   docker compose up --build
+#
+# Endpoints:
+#   http://localhost:8080/healthz   liveness
+#   http://localhost:8080/readyz    readiness (postgres + nats checks)
+#   http://localhost:8080/metrics   Prometheus
+#   http://localhost:8025           MailHog web UI (dev email)
+#   nats://localhost:4222           NATS client port
+
+name: audita-api
+
+services:
+  # ── PostgreSQL 16: shared tables, tenant_id + RLS (ADR-4) ──────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-audita}
+      POSTGRES_USER: ${POSTGRES_USER:-audita_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - audita_pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-audita_app} -d ${POSTGRES_DB:-audita}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── NATS with JetStream: async domain-event backbone (ADR-5) ───────────
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - audita_nats:/data
+    ports:
+      - "${NATS_CLIENT_PORT:-4222}:4222"
+      - "8222:8222" # monitoring
+
+  # ── Dev-only SMTP stub (MailHog) ───────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - "8025:8025" # web UI
+
+  # ── One-shot migration job (ADR-9) ─────────────────────────────────────
+  migrate:
+    build:
+      context: .
+    restart: "no"
+    command: ["/app/audita-migrate"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-audita_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-audita}?sslmode=disable
+      MIGRATIONS_PATH: /app/internal/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Go monolith API (chi + pgx, Go 1.27 toolchain) ─────────────────────
+  audita-api:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-audita_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-audita}?sslmode=disable
+      NATS_URL: nats://nats:4222
+      JWT_PRIVATE_KEY_PEM: ${JWT_PRIVATE_KEY_PEM:?run cmd/keygen to produce}
+      JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM:?run cmd/keygen to produce}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?run cmd/keygen to produce}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8080}
+      BOOTSTRAP_SETUP_TOKEN: ${BOOTSTRAP_SETUP_TOKEN:-}
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_FROM: ${SMTP_FROM:-no-reply@audita.local}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Audita}
+      SMTP_AUTH: ${SMTP_AUTH:-false}
+      SMTP_TLS: ${SMTP_TLS:-false}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      STORAGE_LOCAL_BASE_PATH: /tmp/uploads
+      UPLOAD_MAX_SIZE_BYTES: ${UPLOAD_MAX_SIZE_BYTES:-}
+      INVITE_EXPIRY_HOURS: ${INVITE_EXPIRY_HOURS:-72}
+      SLA_WARN_HOURS_BEFORE: ${SLA_WARN_HOURS_BEFORE:-24}
+      LOG_LEVEL_APP: ${LOG_LEVEL_APP:-info}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_TRACING_SAMPLING_PROBABILITY: ${OTEL_TRACING_SAMPLING_PROBABILITY:-}
+    volumes:
+      - audita_uploads:/tmp/uploads
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      mailhog:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  audita_pgdata:
+  audita_nats:
+  audita_uploads:

@@ -122,32 +122,37 @@ func (b *Bus) Publish(ctx context.Context, ev *Event) error {
 	if err != nil {
 		return fmt.Errorf("eventbus: marshal event: %w", err)
 	}
-	_, err = b.js.PublishMsgAsync(ctx, &nats.Msg{Subject: sub, Header: hdrs, Data: raw})
+	// PublishMsgAsync(m, opts...) — no ctx (async publish returns
+	// immediately); dedupe via Nats-Msg-Id.
+	_, err = b.js.PublishMsgAsync(&nats.Msg{
+		Subject: sub,
+		Header:  hdrs,
+		Data:    raw,
+	}, jetstream.WithMsgID(ev.ID))
 	if err != nil {
 		return fmt.Errorf("eventbus: publish %s: %w", sub, err)
 	}
 	return nil
 }
 
-// Subscribe creates a durable consumer on the given subject filter and invokes
-// handler for each message. JetStream redelivers un-acked messages; handler
-// must be idempotent. Messages failing MaxDeliver times are not retried again
-// (dead-letter handling is performed by the caller via ack nak policy).
+// Subscribe creates a durable pull consumer on the given subject filter and
+// invokes handler for each message via Consume (the current jetstream API —
+// js.Subscribe was removed in favour of consumer handles). JetStream
+// redelivers un-acked messages; handler must be idempotent.
 func (b *Bus) Subscribe(ctx context.Context, name, subjectFilter string, handler func(ctx context.Context, ev *Event) error) error {
-	_, err := b.js.CreateOrUpdateConsumer(ctx, "AUDITA_EVENTS", jetstream.ConsumerConfig{
-		Name:               name,
-		Durable:            name,
-		FilterSubject:      subjectFilter,
-		AckPolicy:          jetstream.AckExplicitPolicy,
-		DeliverPolicy:      jetstream.DeliverAllPolicy,
-		AckWait:            30 * time.Second,
-		MaxDeliver:         5,
-		MaxAckPending:      256,
+	cons, err := b.js.CreateOrUpdateConsumer(ctx, "AUDITA_EVENTS", jetstream.ConsumerConfig{
+		Durable:       name,
+		FilterSubject: subjectFilter,
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		DeliverPolicy: jetstream.DeliverAllPolicy,
+		AckWait:       30 * time.Second,
+		MaxDeliver:    5,
+		MaxAckPending: 256,
 	})
 	if err != nil {
 		return fmt.Errorf("eventbus: create consumer %s: %w", name, err)
 	}
-	_, err = b.js.Subscribe(ctx, subjectFilter, func(msg jetstream.Msg) {
+	cc, err := cons.Consume(func(msg jetstream.Msg) {
 		var ev Event
 		if err := json.Unmarshal(msg.Data(), &ev); err != nil {
 			b.logger.Error("eventbus: unmarshal event failed, terminating message", slog.String("consumer", name), slog.String("error", err.Error()))
@@ -161,10 +166,10 @@ func (b *Bus) Subscribe(ctx context.Context, name, subjectFilter string, handler
 				carrier.Set(k, vals[0])
 			}
 		}
-		ctx = otel.GetTextMapPropagator().Extract(ctx, &carrier)
-		ctx, span := b.tracer.Start(ctx, fmt.Sprintf("consumer.%s", name))
+		msgCtx := otel.GetTextMapPropagator().Extract(context.Background(), &carrier)
+		msgCtx, span := b.tracer.Start(msgCtx, fmt.Sprintf("consumer.%s", name))
 		defer span.End()
-		if err := handler(ctx, &ev); err != nil {
+		if err := handler(msgCtx, &ev); err != nil {
 			b.logger.Error("eventbus: handler failed, will redeliver",
 				slog.String("consumer", name),
 				slog.String("event_id", ev.ID),
@@ -173,10 +178,15 @@ func (b *Bus) Subscribe(ctx context.Context, name, subjectFilter string, handler
 			return
 		}
 		_ = msg.Ack()
-	}, jetstream.BindStream("AUDITA_EVENTS"), jetstream.Durable(name), jetstream.ManualAck())
+	})
 	if err != nil {
 		return fmt.Errorf("eventbus: subscribe %s: %w", name, err)
 	}
+	// Stop the consumer when ctx is cancelled.
+	go func() {
+		<-ctx.Done()
+		cc.Stop()
+	}()
 	return nil
 }
 

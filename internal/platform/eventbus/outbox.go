@@ -50,43 +50,40 @@ type outboxRow struct {
 
 func (r *OutboxRelay) tick(ctx context.Context) error {
 	rows := make([]outboxRow, 0, r.batch)
-	err := r.pool.Acquire(ctx, func(conn *pgxpool.Conn) error {
-		tx, err := conn.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
-		// Claim a batch with FOR UPDATE SKIP LOCKED so multiple relay
-		// instances (if scaled) never publish the same row twice.
-		dbRows, err := tx.Query(ctx, `
-			SELECT id, event FROM outbox_events
-			WHERE delivered_at IS NULL AND attempts < 10
-			ORDER BY id
-			LIMIT $1
-			FOR UPDATE SKIP LOCKED`, r.batch)
-		if err != nil {
-			return err
-		}
-		for dbRows.Next() {
-			var row outboxRow
-			var raw []byte
-			if err := dbRows.Scan(&row.id, &raw); err != nil {
-				dbRows.Close()
-				return err
-			}
-			if err := json.Unmarshal(raw, &row.event); err != nil {
-				dbRows.Close()
-				return err
-			}
-			rows = append(rows, row)
-		}
-		dbRows.Close()
-		if err := dbRows.Err(); err != nil {
-			return err
-		}
-		return tx.Commit(ctx)
-	})
+	// Claim a batch with FOR UPDATE SKIP LOCKED so multiple relay instances
+	// (if scaled) never publish the same row twice.
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	dbRows, err := tx.Query(ctx, `
+		SELECT id, event FROM outbox_events
+		WHERE delivered_at IS NULL AND attempts < 10
+		ORDER BY id
+		LIMIT $1
+		FOR UPDATE SKIP LOCKED`, r.batch)
+	if err != nil {
+		return err
+	}
+	for dbRows.Next() {
+		var row outboxRow
+		var raw []byte
+		if err := dbRows.Scan(&row.id, &raw); err != nil {
+			dbRows.Close()
+			return err
+		}
+		if err := json.Unmarshal(raw, &row.event); err != nil {
+			dbRows.Close()
+			return err
+		}
+		rows = append(rows, row)
+	}
+	dbRows.Close()
+	if err := dbRows.Err(); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 	for _, row := range rows {

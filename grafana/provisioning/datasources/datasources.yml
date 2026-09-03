@@ -1,0 +1,25 @@
+# Audita v2 — Grafana provisioning (Sprint 6, Task 6.4)
+# Mount via: docker compose with grafana service:
+#   volumes:
+#     - ./audita-api/grafana/provisioning:/etc/grafana/provisioning
+#     - ./audita-api/grafana/dashboards:/var/lib/grafana/dashboards
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+  - name: Postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: audita
+    user: audita_app
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false

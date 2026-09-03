@@ -7,12 +7,10 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/audita/audita-api/internal/identity"
 	"github.com/audita/audita-api/internal/platform/runtime"
-)
 )
 
 func main() {

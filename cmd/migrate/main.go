@@ -30,7 +30,7 @@ func main() {
 		runtime.Fatalf(logger, "database not reachable: %v", err)
 	}
 	if err := db.MigrateUp(*databaseURL, *migrationsPath); err != nil {
-		platform.Fatalf(logger, "migrate: %v", err)
+		runtime.Fatalf(logger, "migrate: %v", err)
 	}
 	logger.Info("migrations applied")
 }

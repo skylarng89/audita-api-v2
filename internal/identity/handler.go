@@ -141,7 +141,6 @@ type forgotReq struct {
 // @Success 202
 // @Router /api/v1/auth/forgot-password [post]
 func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := httpx.TenantID(r.Context())
 	var req forgotReq
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.RespondProblem(w, r, err)
@@ -164,7 +163,6 @@ type resetReq struct {
 // @Success 204
 // @Router /api/v1/auth/reset-password [post]
 func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := httpx.TenantID(r.Context())
 	var req resetReq
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.RespondProblem(w, r, err)
@@ -188,7 +186,6 @@ type acceptInviteReq struct {
 // @Success 200 {object} User
 // @Router /api/v1/auth/accept-invite [post]
 func (h *Handler) acceptInvite(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := httpx.TenantID(r.Context())
 	var req acceptInviteReq
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.RespondProblem(w, r, err)

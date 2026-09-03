@@ -114,7 +114,7 @@ func CreatePendingUserTx(ctx context.Context, tx pgx.Tx, p inviteUserParams) (*U
 	if err != nil {
 		return nil, fmt.Errorf("identity: create invite token: %w", err)
 	}
-	u, err := GetUserByEmailTx(ctx, tx, email)
+	u, _, err := GetUserByEmailTx(ctx, tx, p.Email)
 	if err != nil {
 		return nil, err
 	}

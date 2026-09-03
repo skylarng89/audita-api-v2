@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/audita/audita-api/internal/httpx"
+	"github.com/go-chi/chi/v5"
 )
 
 // Handler exposes tenancy REST endpoints (platform-scope).
@@ -16,16 +17,11 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
 // Routes registers platform tenant endpoints on a subrouter. The caller is
 // responsible for wrapping this with super-admin auth middleware.
-func (h *Handler) Routes(r chiRouter) {
+func (h *Handler) Routes(r chi.Router) {
 	r.Get("/tenants", h.list)
 	r.Post("/tenants", h.create)
 	r.Get("/tenants/{id}", h.get)
 	r.Post("/tenants/{id}/status", h.setStatus)
-}
-
-type chiRouter interface {
-	Get(pattern string, handlerFn http.HandlerFunc)
-	Post(pattern string, handlerFn http.HandlerFunc)
 }
 
 type createTenantReq struct {

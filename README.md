@@ -16,7 +16,7 @@ Go backend for Audita v2 — a modular monolith (single binary, split-ready modu
 
 Bounded contexts under `internal/` — each owns its tables, migrations, and a narrow package API. Cross-module side effects flow through NATS events, never direct imports (ADR-1/FR-4, enforced by `depguard` rules in `.golangci.yml`).
 
-```
+```text
 internal/
 ├── identity/        users, roles, JWT + refresh cookie, invites, password reset
 │   ├── handler.go   /api/v1/auth/* routes

@@ -23,47 +23,48 @@ linters:
     - unparam
     - copyloopvar
 
-linters-settings:
-  depguard:
-    rules:
-      # Bounded contexts must not import each other's internals directly.
-      # Cross-module communication happens via NATS events (FR-4) or the
-      # module's exported port types. platform/* shared infra is allowed.
-      bounded-contexts:
-        list-mode: strict
-        files:
-          - "**/internal/identity/**/*.go"
-          - "**/internal/tenancy/**/*.go"
-          - "**/internal/changerequest/**/*.go"
-          - "**/internal/collaboration/**/*.go"
-          - "**/internal/audit/**/*.go"
-          - "**/internal/notification/**/*.go"
-        deny:
-          - pkg: "github.com/audita/audita-api/internal/identity/store"
-            desc: "import sibling module internals; publish a port interface instead (ADR-1)"
-          - pkg: "github.com/audita/audita-api/internal/changerequest/store"
-            desc: "import sibling module internals; publish a port interface instead (ADR-1)"
-          - pkg: "github.com/audita/audita-api/internal/collaboration/store"
-            desc: "import sibling module internals; publish a port interface instead (ADR-1)"
-          - pkg: "github.com/audita/audita-api/internal/audit/store"
-            desc: "import sibling module internals; publish a port interface instead (ADR-1)"
-          - pkg: "github.com/audita/audita-api/internal/notification/store"
-            desc: "import sibling module internals; publish a port interface instead (ADR-1)"
+  settings:
+    depguard:
+      rules:
+        # Bounded contexts must not import each other's internals directly.
+        # Cross-module communication happens via NATS events (FR-4) or the
+        # module's exported port types. platform/* shared infra is allowed.
+        bounded-contexts:
+          list-mode: strict
+          files:
+            - "**/internal/identity/**/*.go"
+            - "**/internal/tenancy/**/*.go"
+            - "**/internal/changerequest/**/*.go"
+            - "**/internal/collaboration/**/*.go"
+            - "**/internal/audit/**/*.go"
+            - "**/internal/notification/**/*.go"
+          deny:
+            - pkg: "github.com/audita/audita-api/internal/identity/store"
+              desc: "import sibling module internals; publish a port interface instead (ADR-1)"
+            - pkg: "github.com/audita/audita-api/internal/changerequest/store"
+              desc: "import sibling module internals; publish a port interface instead (ADR-1)"
+            - pkg: "github.com/audita/audita-api/internal/collaboration/store"
+              desc: "import sibling module internals; publish a port interface instead (ADR-1)"
+            - pkg: "github.com/audita/audita-api/internal/audit/store"
+              desc: "import sibling module internals; publish a port interface instead (ADR-1)"
+            - pkg: "github.com/audita/audita-api/internal/notification/store"
+              desc: "import sibling module internals; publish a port interface instead (ADR-1)"
 
-  revive:
-    rules:
-      - name: package-comments
-      - name: exported
-      - name: error-return
-      - name: var-naming
-      - name: context-as-argument
+    revive:
+      rules:
+        - name: package-comments
+        - name: exported
+        - name: error-return
+        - name: var-naming
+        - name: context-as-argument
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # Tests may relax some checks.
-    - path: _test\.go
-      linters:
-        - errcheck
-        - dupl
+  exclusions:
+    rules:
+      # Tests may relax some checks.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - dupl
